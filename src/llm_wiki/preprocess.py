@@ -41,7 +41,7 @@ def preprocess_tree(
     force: bool = False,
     dry_run: bool = False,
 ) -> list[PreprocessResult]:
-    files = [path for path in sorted(raw_root.rglob("*")) if path.is_file()]
+    files = [path for path in sorted(raw_root.rglob("*")) if path.is_file() and not _is_hidden_path(path, raw_root)]
     out_root.mkdir(parents=True, exist_ok=True)
     if dry_run:
         return [
@@ -163,3 +163,10 @@ def _fence_language(path: Path) -> str:
         ".txt": "",
     }.get(suffix, "")
 
+
+def _is_hidden_path(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    return any(part.startswith(".") for part in relative.parts)

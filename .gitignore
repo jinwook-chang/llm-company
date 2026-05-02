@@ -10,3 +10,4 @@ vault/
 raw/*
 !raw/samsung-electronics-public/
 !raw/samsung-electronics-public/**
+raw/**/.DS_Store

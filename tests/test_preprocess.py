@@ -6,6 +6,7 @@ import pytest
 
 from llm_wiki.config import PreprocessConfig
 from llm_wiki.preprocess import output_path_for, preprocess_file
+from llm_wiki.preprocess import preprocess_tree
 from llm_wiki.providers import LlmProvider, MarkdownResult, MockProvider
 
 
@@ -46,6 +47,17 @@ def test_supported_mime_uses_llm(tmp_path: Path) -> None:
     assert "Mock Markdown extracted" in result.output_path.read_text(encoding="utf-8")
 
 
+def test_preprocess_tree_skips_hidden_system_files(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / ".DS_Store").write_bytes(b"binary")
+    (raw / "visible.md").write_text("# Visible", encoding="utf-8")
+
+    results = preprocess_tree(raw, tmp_path / "preprocessed", MockProvider(), PreprocessConfig())
+
+    assert [result.source_path.name for result in results] == ["visible.md"]
+
+
 def test_llm_failure_falls_back_to_docling(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class FailingProvider(LlmProvider):
         name = "mock"
@@ -64,4 +76,3 @@ def test_llm_failure_falls_back_to_docling(monkeypatch: pytest.MonkeyPatch, tmp_
     assert result.processor == "docling"
     assert result.fallback_used is True
     assert "# Fallback" in result.output_path.read_text(encoding="utf-8")
-
