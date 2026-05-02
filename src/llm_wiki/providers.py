@@ -134,7 +134,11 @@ class VertexProvider(LlmProvider):
     def _client(self) -> Any:
         from google import genai
 
-        return genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+        if not project:
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT is required for the vertex provider.")
+        return genai.Client(vertexai=True, project=project, location=location)
 
     def extract_markdown_from_file(self, path: Path, mime_type: str, prompt: str) -> MarkdownResult:
         from google.genai import types
@@ -187,4 +191,3 @@ def _first_heading_or_title(text: str) -> str:
 
 def _truncate(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 3] + "..."
-
