@@ -1,0 +1,4 @@
+interface:
+  display_name: "LLM Wiki Builder"
+  short_description: "Build Obsidian wikis from raw company files."
+  default_prompt: "Build or update an Obsidian-style wiki from raw company documents using the llm-wiki CLI."
