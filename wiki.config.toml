@@ -1,0 +1,23 @@
+[paths]
+raw = "raw"
+preprocessed = "preprocessed"
+vault = "vault"
+build = ".wiki_build"
+
+[llm]
+provider = "mock"
+model = ""
+concurrency = 4
+
+[preprocess]
+text_strategy = "direct"
+max_file_mb = 50
+
+[wiki]
+tag_prefix = ""
+page_dir = ""
+
+[mime_overrides]
+# "application/pdf" = "llm"
+# "application/vnd.ms-excel" = "docling"
+
