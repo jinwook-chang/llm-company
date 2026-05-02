@@ -5,7 +5,7 @@ vault = "vault"
 build = ".wiki_build"
 
 [llm]
-provider = "mock"
+provider = "openai"
 model = ""
 concurrency = 4
 
@@ -20,4 +20,3 @@ page_dir = ""
 [mime_overrides]
 # "application/pdf" = "llm"
 # "application/vnd.ms-excel" = "docling"
-
