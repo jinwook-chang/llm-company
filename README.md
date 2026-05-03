@@ -56,8 +56,10 @@ raw/
   level1/
     level2/
       level3/
-        document.md
-        document.pdf
+        level4/
+          level5/
+            document.md
+            document.pdf
 ```
 
 예시:
@@ -163,9 +165,9 @@ uv run llm-wiki build \
 동작 방식:
 
 1. 계층 요약을 만듭니다.
-   - level1 요약을 먼저 만듭니다.
-   - level2 요약에는 부모 level1 요약이 context로 들어갑니다.
-   - level3 요약에는 부모 level1, level2 요약이 context로 들어갑니다.
+   - depth 1부터 가장 깊은 디렉터리까지 순서대로 요약합니다.
+   - 하위 level 요약에는 이미 만들어진 모든 상위 level 요약이 context로 들어갑니다.
+   - 따라서 level4, level5 이상의 깊은 트리도 처리할 수 있습니다.
 2. 각 preprocessed 파일에서 여러 concept page를 추출합니다.
    - LLM에는 파일 본문과 관련 계층 요약이 함께 들어갑니다.
    - LLM은 `title`, `aliases`, `tags`, `concept_type`, `confidence`, Markdown body를 구조화해서 반환합니다.
@@ -267,10 +269,10 @@ Preprocess는 파일 단위 병렬 작업입니다.
 
 Summary는 경로 계층을 기준으로 만듭니다.
 
-- 첫 세 path level을 context hierarchy로 봅니다.
-- level1 디렉터리 요약은 병렬로 생성합니다.
-- level2 요약에는 부모 level1 요약이 들어갑니다.
-- level3 요약에는 부모 level1, level2 요약이 들어갑니다.
+- 모든 directory depth를 context hierarchy로 봅니다.
+- depth 1 디렉터리 요약을 먼저 만들고, depth 2, depth 3, depth 4 순서로 가장 깊은 디렉터리까지 내려갑니다.
+- 같은 depth의 디렉터리들은 병렬로 요약합니다.
+- 각 디렉터리 요약에는 이미 만들어진 모든 상위 디렉터리 요약이 들어갑니다.
 - 결과는 `.wiki_build/summaries/`에 저장됩니다.
 
 예:
@@ -284,6 +286,22 @@ preprocessed/business/ds/memory-business.md
 ```text
 .wiki_build/summaries/business.md
 .wiki_build/summaries/business/ds.md
+```
+
+더 깊은 예:
+
+```text
+preprocessed/company/org/team/project/policy/doc.md
+```
+
+이 경우 다음 summary들이 순서대로 생성되고, `doc.md`의 concept extraction context로 들어갑니다.
+
+```text
+.wiki_build/summaries/company.md
+.wiki_build/summaries/company/org.md
+.wiki_build/summaries/company/org/team.md
+.wiki_build/summaries/company/org/team/project.md
+.wiki_build/summaries/company/org/team/project/policy.md
 ```
 
 ### Concept Extraction 내부 동작
@@ -372,4 +390,3 @@ vault/
 이렇게 해서 사내 raw 또는 생성된 vault가 실수로 commit되는 것을 막습니다.
 
 Codex/Gemini/opencode 같은 에이전트에서 사용할 때는 `skills/llm-wiki-builder`를 Skill wrapper로 사용하면 됩니다.
-

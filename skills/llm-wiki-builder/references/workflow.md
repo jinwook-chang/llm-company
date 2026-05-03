@@ -54,12 +54,14 @@ VERTEX_MODEL=gemini-2.5-pro
 
 ## Build Order
 
-1. Generate level1 summaries in parallel.
-2. Generate level2 summaries with parent level1 context.
-3. Generate level3 summaries with parent level1 and level2 context.
+1. Generate summaries from depth 1 through the deepest directory depth.
+2. Generate same-depth summaries in parallel.
+3. Include all already-created parent summaries when generating child summaries.
 4. Generate concept pages from each preprocessed file with the nearest hierarchy context.
 5. Run LLM-based vault refinement over generated pages.
 6. Build the page index and unresolved-link report.
+
+Depth is not limited to level3. Trees with level4, level5, or deeper paths are supported.
 
 ## Vault Refinement
 

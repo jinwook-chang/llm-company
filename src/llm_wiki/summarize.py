@@ -26,14 +26,10 @@ def build_summaries(
     summary_root.mkdir(parents=True, exist_ok=True)
     summaries: dict[Path, SummaryResult] = {}
 
-    level1_dirs = _dirs_at_depth(preprocessed_root, 1)
-    summaries.update(_summarize_dirs(level1_dirs, preprocessed_root, summary_root, provider, {}, concurrency))
-
-    level2_dirs = _dirs_at_depth(preprocessed_root, 2)
-    summaries.update(_summarize_dirs(level2_dirs, preprocessed_root, summary_root, provider, summaries, concurrency))
-
-    level3_dirs = _dirs_at_depth(preprocessed_root, 3)
-    summaries.update(_summarize_dirs(level3_dirs, preprocessed_root, summary_root, provider, summaries, concurrency))
+    max_depth = _max_dir_depth(preprocessed_root)
+    for depth in range(1, max_depth + 1):
+        dirs = _dirs_at_depth(preprocessed_root, depth)
+        summaries.update(_summarize_dirs(dirs, preprocessed_root, summary_root, provider, summaries, concurrency))
 
     return summaries
 
@@ -110,3 +106,8 @@ def _dirs_at_depth(root: Path, depth: int) -> list[Path]:
             dirs.append(path)
     return dirs
 
+
+def _max_dir_depth(root: Path) -> int:
+    if not root.exists():
+        return 0
+    return max((len(path.relative_to(root).parts) for path in root.rglob("*") if path.is_dir()), default=0)
