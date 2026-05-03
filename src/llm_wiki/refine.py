@@ -17,9 +17,10 @@ REFINE_SYSTEM_PROMPT = """Merge duplicate Obsidian wiki pages into one canonical
 
 Rules:
 - Preserve all factual information and do not invent facts.
-- Choose the clearest canonical title.
+- Choose the clearest canonical title (prefer Korean if available, otherwise clear English).
 - Put alternate spellings, Korean names, acronyms, and prior titles into aliases.
 - Merge overlapping content without repeating identical facts.
+- Write the final polished body EVERYTHING in Korean (한국어).
 - Keep useful Obsidian links.
 - Return one polished page body in Markdown.
 """
@@ -59,6 +60,8 @@ class VaultPage:
 def refine_vault(
     vault_root: Path, build_root: Path, provider: LlmProvider, embedding_model: str = ""
 ) -> RefineResult:
+    from tqdm import tqdm
+
     pages = _load_pages(vault_root)
     if not pages:
         _write_refine_report(build_root, [], 0, 0)
@@ -71,7 +74,7 @@ def refine_vault(
     alias_to_title: dict[str, str] = {}
     used_paths: set[Path] = set()
 
-    for group in groups:
+    for group in tqdm(groups, desc="Merging groups", unit="group"):
         canonical = _choose_canonical(group)
         merged = _merge_group(group, canonical, provider)
         canonical_path = _unique_page_path(vault_root, merged.title, used_paths)
@@ -148,6 +151,8 @@ def _apply_semantic_grouping(
     texts = [f"{p.title}\n{', '.join(p.aliases)}" for p in pages]
     try:
         embeddings = provider.embed(texts, model=embedding_model)
+        if len(embeddings) != len(pages):
+            return
     except Exception:
         # Fallback if embedding fails
         return

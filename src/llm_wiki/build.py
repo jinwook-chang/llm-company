@@ -21,7 +21,10 @@ def build_wiki(
     *,
     concurrency: int = 4,
 ) -> dict:
+    print(f"--- Phase 1: Building folder summaries ---")
     summaries = build_summaries(preprocessed_root, build_root, provider, concurrency=concurrency)
+    
+    print(f"--- Phase 2: Generating wiki pages ---")
     pages = generate_pages(
         preprocessed_root,
         vault_root,
@@ -31,7 +34,11 @@ def build_wiki(
         wiki_config,
         concurrency=concurrency,
     )
+    
+    print(f"--- Phase 3: Refining vault (merging duplicates) ---")
     refine_result = refine_vault(vault_root, build_root, provider)
+    
+    print(f"--- Phase 4: Resolving links ---")
     unresolved = resolve_links(vault_root, build_root)
     report = {
         "built_at": datetime.now(timezone.utc).isoformat(),

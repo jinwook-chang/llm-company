@@ -54,15 +54,19 @@ def _summarize_dirs(
     previous: dict[Path, SummaryResult],
     concurrency: int,
 ) -> dict[Path, SummaryResult]:
+    from tqdm import tqdm
+
     results: dict[Path, SummaryResult] = {}
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
         futures = {
             executor.submit(_summarize_dir, directory, root, summary_root, provider, previous): directory
             for directory in dirs
         }
-        for future in as_completed(futures):
-            relative, result = future.result()
-            results[relative] = result
+        with tqdm(total=len(futures), desc="Summarizing folders", unit="folder") as pbar:
+            for future in as_completed(futures):
+                relative, result = future.result()
+                results[relative] = result
+                pbar.update(1)
     return results
 
 

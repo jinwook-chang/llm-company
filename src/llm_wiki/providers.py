@@ -203,11 +203,26 @@ class VertexProvider(LlmProvider):
         data = json.loads(response.text or "{}")
         return response_schema.model_validate(data)
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def embed(self, texts: list[str], model: str = "") -> list[list[float]]:
         client = self._client()
-        model = os.getenv("VERTEX_EMBEDDING_MODEL", "gemini-embedding-2-preview")
+        embedding_model = model or os.getenv("VERTEX_EMBEDDING_MODEL", "gemini-embedding-2-preview")
+        
+        # gemini-embedding-2 (and newer) aggregates multiple inputs into a single embedding 
+        # when passed as a list to embed_content. To get individual embeddings synchronously, 
+        # we call them in parallel using a ThreadPoolExecutor.
+        if "gemini-embedding-2" in embedding_model:
+            import concurrent.futures
+            
+            def _get_one(text: str) -> list[float]:
+                resp = client.models.embed_content(model=embedding_model, contents=text)
+                return resp.embeddings[0].values
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                return list(executor.map(_get_one, texts))
+        
+        # For older models or if not gemini-embedding-2, batching usually works as expected.
         response = client.models.embed_content(
-            model=model,
+            model=embedding_model,
             contents=texts,
         )
         return [e.values for e in response.embeddings]

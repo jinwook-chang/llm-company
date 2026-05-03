@@ -16,7 +16,8 @@ GENERATE_SYSTEM_PROMPT = """Create Obsidian wiki concept pages from internal com
 Rules:
 - Extract multiple concept pages when the source contains multiple important concepts.
 - Preserve source facts. Do not invent.
-- Write in the same primary language as the source.
+- Write EVERYTHING in Korean (한국어). 
+- For technical terms or entity names, you may include the original English in parentheses once, but the primary explanation must be in Korean.
 - Use Obsidian links like [[Concept]] only for concepts that should become pages.
 - Include concise tags.
 """
@@ -41,6 +42,8 @@ def generate_pages(
     *,
     concurrency: int = 4,
 ) -> list[GeneratedPage]:
+    from tqdm import tqdm
+
     files = sorted(preprocessed_root.rglob("*.md"))
     page_root = vault_root / wiki_config.page_dir
     page_root.mkdir(parents=True, exist_ok=True)
@@ -53,38 +56,40 @@ def generate_pages(
             executor.submit(_extract_pages, path, preprocessed_root, provider, summaries): path
             for path in files
         }
-        for future in as_completed(futures):
-            source_path = futures[future]
-            relative = source_path.relative_to(preprocessed_root)
-            meta, source_body = split_frontmatter(source_path.read_text(encoding="utf-8"))
-            for page in future.result():
-                slug = _unique_slug(slugify(page.title), used_slugs)
-                aliases = _safe_aliases(page.title, page.aliases, source_body)
-                tags = sorted({normalize_tag(tag, wiki_config.tag_prefix) for tag in page.tags if tag.strip()})
-                output_path = page_root / f"{slug}.md"
-                output_path.write_text(
-                    markdown_with_frontmatter(
-                        {
-                            "title": page.title,
-                            "aliases": aliases,
-                            "tags": tags,
-                            "source_paths": [meta.get("source_path", str(relative))],
-                            "concept_type": page.concept_type,
-                            "confidence": page.confidence,
-                        },
-                        page.body,
-                    ),
-                    encoding="utf-8",
-                )
-                generated.append(
-                    GeneratedPage(
-                        title=page.title,
-                        path=output_path,
-                        aliases=aliases,
-                        tags=tags,
-                        source_path=str(relative),
+        with tqdm(total=len(futures), desc="Generating pages", unit="file") as pbar:
+            for future in as_completed(futures):
+                source_path = futures[future]
+                relative = source_path.relative_to(preprocessed_root)
+                meta, source_body = split_frontmatter(source_path.read_text(encoding="utf-8"))
+                for page in future.result():
+                    slug = _unique_slug(slugify(page.title), used_slugs)
+                    aliases = _safe_aliases(page.title, page.aliases, source_body)
+                    tags = sorted({normalize_tag(tag, wiki_config.tag_prefix) for tag in page.tags if tag.strip()})
+                    output_path = page_root / f"{slug}.md"
+                    output_path.write_text(
+                        markdown_with_frontmatter(
+                            {
+                                "title": page.title,
+                                "aliases": aliases,
+                                "tags": tags,
+                                "source_paths": [meta.get("source_path", str(relative))],
+                                "concept_type": page.concept_type,
+                                "confidence": page.confidence,
+                            },
+                            page.body,
+                        ),
+                        encoding="utf-8",
                     )
-            )
+                    generated.append(
+                        GeneratedPage(
+                            title=page.title,
+                            path=output_path,
+                            aliases=aliases,
+                            tags=tags,
+                            source_path=str(relative),
+                        )
+                    )
+                pbar.update(1)
 
     write_page_index(build_root, generated, vault_root)
     return sorted(generated, key=lambda page: page.title)
