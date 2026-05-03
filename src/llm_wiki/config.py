@@ -60,7 +60,19 @@ def load_config(config_path: Path | str = "wiki.config.toml") -> AppConfig:
     wiki_data = data.get("wiki", {})
 
     provider = os.getenv("LLM_WIKI_PROVIDER", llm_data.get("provider", "mock"))
-    model = os.getenv("LLM_WIKI_MODEL", llm_data.get("model", ""))
+    
+    # Prioritize provider-specific model env vars, then general LLM_WIKI_MODEL, then config.
+    model = os.getenv("LLM_WIKI_MODEL")
+    if not model:
+        if provider == "openai":
+            model = os.getenv("OPENAI_MODEL")
+        elif provider == "vertex":
+            model = os.getenv("VERTEX_MODEL")
+        elif provider == "azure_openai":
+            model = os.getenv("AZURE_OPENAI_DEPLOYMENT")
+    
+    if not model:
+        model = llm_data.get("model", "")
 
     return AppConfig(
         paths=PathConfig(
