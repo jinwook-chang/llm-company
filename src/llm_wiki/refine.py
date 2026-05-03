@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from llm_wiki.providers import LlmProvider
 from llm_wiki.resolve import WIKI_LINK_PATTERN
-from llm_wiki.schemas import ConceptPage
+from llm_wiki.schemas import ConceptPage, MergeGroupDecision
 from llm_wiki.utils import markdown_with_frontmatter, normalize_tag, slugify, split_frontmatter
 
 
@@ -21,6 +22,14 @@ Rules:
 - Merge overlapping content without repeating identical facts.
 - Keep useful Obsidian links.
 - Return one polished page body in Markdown.
+"""
+
+IDENTITY_SYSTEM_PROMPT = """Determine if these documents refer to the exact same concept or entity.
+
+Rules:
+- Be conservative. Only mark as identical if you are sure.
+- Different names for the same thing (e.g., acronyms, Korean vs English) are identical.
+- Return structured matches for each candidate.
 """
 
 
@@ -47,14 +56,16 @@ class VaultPage:
         return [str(alias) for alias in aliases]
 
 
-def refine_vault(vault_root: Path, build_root: Path, provider: LlmProvider) -> RefineResult:
+def refine_vault(
+    vault_root: Path, build_root: Path, provider: LlmProvider, embedding_model: str = ""
+) -> RefineResult:
     pages = _load_pages(vault_root)
     if not pages:
         _write_refine_report(build_root, [], 0, 0)
         _write_page_index(build_root, [], vault_root)
         return RefineResult(page_count=0, merged_page_count=0, rewritten_link_count=0)
 
-    groups = _group_pages(pages)
+    groups = _group_pages(pages, provider, embedding_model=embedding_model)
     merged_pages: list[VaultPage] = []
     merged_titles: list[str] = []
     alias_to_title: dict[str, str] = {}
@@ -92,7 +103,7 @@ def _load_pages(vault_root: Path) -> list[VaultPage]:
     return pages
 
 
-def _group_pages(pages: list[VaultPage]) -> list[list[VaultPage]]:
+def _group_pages(pages: list[VaultPage], provider: LlmProvider, embedding_model: str = "") -> list[list[VaultPage]]:
     parent = {page.path: page.path for page in pages}
     by_key: dict[str, Path] = {}
 
@@ -108,6 +119,7 @@ def _group_pages(pages: list[VaultPage]) -> list[list[VaultPage]]:
         if root_left != root_right:
             parent[root_right] = root_left
 
+    # 1. Exact string matching (Rules)
     for page in pages:
         keys = _page_keys(page)
         for key in keys:
@@ -116,10 +128,78 @@ def _group_pages(pages: list[VaultPage]) -> list[list[VaultPage]]:
             else:
                 by_key[key] = page.path
 
+    # 2. Semantic matching (LLM + Embedding)
+    if len(pages) > 1:
+        _apply_semantic_grouping(pages, union, find, provider, embedding_model=embedding_model)
+
     grouped: dict[Path, list[VaultPage]] = {}
     for page in pages:
         grouped.setdefault(find(page.path), []).append(page)
     return sorted(grouped.values(), key=lambda group: _choose_canonical(group).title.lower())
+
+
+def _apply_semantic_grouping(
+    pages: list[VaultPage],
+    union_fn: Callable[[Path, Path], None],
+    find_fn: Callable[[Path], Path],
+    provider: LlmProvider,
+    embedding_model: str = "",
+) -> None:
+    texts = [f"{p.title}\n{', '.join(p.aliases)}" for p in pages]
+    try:
+        embeddings = provider.embed(texts, model=embedding_model)
+    except Exception:
+        # Fallback if embedding fails
+        return
+
+    for i, page in enumerate(pages):
+        root_i = find_fn(page.path)
+        scores = []
+        for j, other in enumerate(pages):
+            if i == j:
+                continue
+            if find_fn(other.path) == root_i:
+                continue
+            score = _cosine_similarity(embeddings[i], embeddings[j])
+            if score > 0.8:
+                scores.append((score, j))
+
+        scores.sort(key=lambda x: x[0], reverse=True)
+        candidates = [pages[j] for _, j in scores[:3]]
+        if not candidates:
+            continue
+
+        decision = _check_identity(page, candidates, provider)
+        for match in decision.matches:
+            if match.is_identical:
+                other_page = next((c for c in candidates if c.title == match.title), None)
+                if other_page:
+                    union_fn(page.path, other_page.path)
+
+
+def _check_identity(reference: VaultPage, candidates: list[VaultPage], provider: LlmProvider) -> MergeGroupDecision:
+    payload = []
+    for cand in candidates:
+        payload.append(f"# Page: {cand.title}\nAliases: {', '.join(cand.aliases)}\nContent snippet: {cand.body[:500]}")
+
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Reference Document:\nTitle: {reference.title}\nAliases: {', '.join(reference.aliases)}\n"
+                f"Content snippet: {reference.body[:500]}\n\n"
+                "Candidates to compare:\n\n" + "\n\n---\n\n".join(payload)
+            ),
+        }
+    ]
+    return provider.generate_structured(IDENTITY_SYSTEM_PROMPT, messages, MergeGroupDecision)
+
+
+def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
+    dot_product = sum(a * b for a, b in zip(v1, v2))
+    mag1 = math.sqrt(sum(a * a for a in v1))
+    mag2 = math.sqrt(sum(b * b for b in v2))
+    return dot_product / (mag1 * mag2) if mag1 > 0 and mag2 > 0 else 0.0
 
 
 def _page_keys(page: VaultPage) -> set[str]:

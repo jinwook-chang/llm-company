@@ -77,7 +77,7 @@ def main() -> None:
         build_root = args.build_root or config.paths.build
         provider_name = args.provider or config.llm.provider
         provider = make_provider(provider_name, config.llm.model, config.mime_overrides)
-        refine_result = refine_vault(vault_root, build_root, provider)
+        refine_result = refine_vault(vault_root, build_root, provider, embedding_model=config.llm.embedding_model)
         unresolved = resolve_links(vault_root, build_root)
         _update_refine_report(build_root, refine_result, len(unresolved))
         print(

@@ -41,6 +41,9 @@ class LlmProvider:
     def generate_structured(self, system_prompt: str, messages: list[dict[str, str]], response_schema: type[T]) -> T:
         raise NotImplementedError
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise NotImplementedError
+
 
 class MockProvider(LlmProvider):
     name = "mock"
@@ -85,7 +88,19 @@ class MockProvider(LlmProvider):
                     "body": f"# {title}\n\nMock refined page.\n\n{_truncate(joined, 800)}",
                 }
             )
+        if schema_name == "MergeGroupDecision":
+            return response_schema.model_validate(
+                {
+                    "matches": [
+                        {"title": title, "is_identical": True, "reason": "Mock same"}
+                        for title in _extract_candidate_titles(joined)
+                    ]
+                }
+            )
         raise ValueError(f"MockProvider does not know schema {schema_name}")
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0] * 1536 for _ in texts]
 
 
 class OpenAIProvider(LlmProvider):
@@ -122,6 +137,13 @@ class OpenAIProvider(LlmProvider):
         )
         return response.output_parsed
 
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        client = self._client()
+        response = client.embeddings.create(
+            input=texts, model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
+        )
+        return [e.embedding for e in response.data]
+
 
 class AzureOpenAIProvider(OpenAIProvider):
     name = "azure_openai"
@@ -138,6 +160,13 @@ class AzureOpenAIProvider(OpenAIProvider):
     def extract_markdown_from_file(self, path: Path, mime_type: str, prompt: str) -> MarkdownResult:
         result = super().extract_markdown_from_file(path, mime_type, prompt)
         return MarkdownResult(result.markdown, "llm:azure_openai")
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        client = self._client()
+        response = client.embeddings.create(
+            input=texts, model=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-large")
+        )
+        return [e.embedding for e in response.data]
 
 
 class VertexProvider(LlmProvider):
@@ -173,6 +202,15 @@ class VertexProvider(LlmProvider):
         )
         data = json.loads(response.text or "{}")
         return response_schema.model_validate(data)
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        client = self._client()
+        model = os.getenv("VERTEX_EMBEDDING_MODEL", "gemini-embedding-2-preview")
+        response = client.models.embed_content(
+            model=model,
+            contents=texts,
+        )
+        return [e.values for e in response.embeddings]
 
 
 def make_provider(name: str, model: str = "", mime_overrides: dict[str, str] | None = None) -> LlmProvider:
@@ -210,3 +248,12 @@ def _canonical_seed_title(text: str) -> str:
         if line.startswith("Canonical seed title:"):
             return line.split(":", 1)[1].strip()
     return ""
+
+
+def _extract_candidate_titles(text: str) -> list[str]:
+    # Extract titles from the prompt for MockProvider
+    titles = []
+    for line in text.splitlines():
+        if line.startswith("# Page: "):
+            titles.append(line.removeprefix("# Page: ").strip())
+    return titles

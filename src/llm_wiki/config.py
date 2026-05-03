@@ -23,6 +23,7 @@ class PathConfig:
 class LlmConfig:
     provider: ProviderName = "mock"
     model: str = ""
+    embedding_model: str = ""
     concurrency: int = 4
 
 
@@ -74,6 +75,18 @@ def load_config(config_path: Path | str = "wiki.config.toml") -> AppConfig:
     if not model:
         model = llm_data.get("model", "")
 
+    embedding_model = os.getenv("LLM_WIKI_EMBEDDING_MODEL")
+    if not embedding_model:
+        if provider == "openai":
+            embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL")
+        elif provider == "vertex":
+            embedding_model = os.getenv("VERTEX_EMBEDDING_MODEL")
+        elif provider == "azure_openai":
+            embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT")
+    
+    if not embedding_model:
+        embedding_model = llm_data.get("embedding_model", "")
+
     return AppConfig(
         paths=PathConfig(
             raw=Path(paths_data.get("raw", "raw")),
@@ -84,6 +97,7 @@ def load_config(config_path: Path | str = "wiki.config.toml") -> AppConfig:
         llm=LlmConfig(
             provider=_as_provider(provider),
             model=model,
+            embedding_model=embedding_model,
             concurrency=int(llm_data.get("concurrency", 4)),
         ),
         preprocess=PreprocessConfig(

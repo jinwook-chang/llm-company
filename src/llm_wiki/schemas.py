@@ -20,3 +20,13 @@ class ConceptPage(BaseModel):
 class ConceptPagesResult(BaseModel):
     pages: list[ConceptPage] = Field(default_factory=list)
 
+
+class DuplicateMatch(BaseModel):
+    title: str
+    is_identical: bool
+    reason: str
+
+
+class MergeGroupDecision(BaseModel):
+    matches: list[DuplicateMatch]
+
