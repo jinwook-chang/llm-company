@@ -6,7 +6,7 @@ build = ".wiki_build"
 
 [llm]
 provider = "openai"
-model = ""
+model = "gpt-5.4-mini"
 concurrency = 4
 
 [preprocess]

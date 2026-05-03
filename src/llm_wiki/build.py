@@ -7,6 +7,7 @@ from pathlib import Path
 from llm_wiki.config import WikiConfig
 from llm_wiki.generate import generate_pages
 from llm_wiki.providers import LlmProvider
+from llm_wiki.refine import refine_vault
 from llm_wiki.resolve import resolve_links
 from llm_wiki.summarize import build_summaries
 
@@ -30,15 +31,18 @@ def build_wiki(
         wiki_config,
         concurrency=concurrency,
     )
+    refine_result = refine_vault(vault_root, build_root, provider)
     unresolved = resolve_links(vault_root, build_root)
     report = {
         "built_at": datetime.now(timezone.utc).isoformat(),
         "summary_count": len(summaries),
-        "page_count": len(pages),
+        "generated_page_count": len(pages),
+        "page_count": refine_result.page_count,
+        "merged_page_count": refine_result.merged_page_count,
+        "rewritten_link_count": refine_result.rewritten_link_count,
         "unresolved_link_count": len(unresolved),
     }
     report_root = build_root / "reports"
     report_root.mkdir(parents=True, exist_ok=True)
     (report_root / "build_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
-

@@ -42,7 +42,9 @@ def generate_pages(
     concurrency: int = 4,
 ) -> list[GeneratedPage]:
     files = sorted(preprocessed_root.rglob("*.md"))
-    vault_root.mkdir(parents=True, exist_ok=True)
+    page_root = vault_root / wiki_config.page_dir
+    page_root.mkdir(parents=True, exist_ok=True)
+    _clear_existing_pages(page_root)
     used_slugs: set[str] = set()
     generated: list[GeneratedPage] = []
 
@@ -54,17 +56,17 @@ def generate_pages(
         for future in as_completed(futures):
             source_path = futures[future]
             relative = source_path.relative_to(preprocessed_root)
-            meta, _ = split_frontmatter(source_path.read_text(encoding="utf-8"))
+            meta, source_body = split_frontmatter(source_path.read_text(encoding="utf-8"))
             for page in future.result():
                 slug = _unique_slug(slugify(page.title), used_slugs)
+                aliases = _safe_aliases(page.title, page.aliases, source_body)
                 tags = sorted({normalize_tag(tag, wiki_config.tag_prefix) for tag in page.tags if tag.strip()})
-                output_path = vault_root / wiki_config.page_dir / f"{slug}.md"
-                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path = page_root / f"{slug}.md"
                 output_path.write_text(
                     markdown_with_frontmatter(
                         {
                             "title": page.title,
-                            "aliases": page.aliases,
+                            "aliases": aliases,
                             "tags": tags,
                             "source_paths": [meta.get("source_path", str(relative))],
                             "concept_type": page.concept_type,
@@ -78,11 +80,11 @@ def generate_pages(
                     GeneratedPage(
                         title=page.title,
                         path=output_path,
-                        aliases=page.aliases,
+                        aliases=aliases,
                         tags=tags,
                         source_path=str(relative),
                     )
-                )
+            )
 
     write_page_index(build_root, generated, vault_root)
     return sorted(generated, key=lambda page: page.title)
@@ -137,3 +139,19 @@ def _unique_slug(base: str, used: set[str]) -> str:
     used.add(slug)
     return slug
 
+
+def _clear_existing_pages(page_root: Path) -> None:
+    for path in page_root.glob("*.md"):
+        path.unlink()
+
+
+def _safe_aliases(title: str, aliases: list[str], source_body: str) -> list[str]:
+    title_key = slugify(title)
+    safe: list[str] = []
+    for alias in aliases:
+        value = alias.strip()
+        if not value:
+            continue
+        if value in source_body or slugify(value) == title_key:
+            safe.append(value)
+    return list(dict.fromkeys(safe))

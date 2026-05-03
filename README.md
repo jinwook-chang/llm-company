@@ -6,6 +6,7 @@ Build an Obsidian-style internal wiki from a `raw/` document tree.
 uv sync --extra dev
 uv run llm-wiki preprocess --raw raw --out preprocessed
 uv run llm-wiki build --preprocessed preprocessed --vault vault
+uv run llm-wiki refine --vault vault
 uv run llm-wiki all --raw raw --preprocessed preprocessed --vault vault
 ```
 

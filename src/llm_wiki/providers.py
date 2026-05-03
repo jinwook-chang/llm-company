@@ -73,6 +73,18 @@ class MockProvider(LlmProvider):
                     ]
                 }
             )
+        if schema_name == "ConceptPage":
+            refined_title = _canonical_seed_title(joined) or title
+            return response_schema.model_validate(
+                {
+                    "title": refined_title,
+                    "aliases": [],
+                    "tags": ["mock", "refined"],
+                    "concept_type": "concept",
+                    "confidence": 0.5,
+                    "body": f"# {title}\n\nMock refined page.\n\n{_truncate(joined, 800)}",
+                }
+            )
         raise ValueError(f"MockProvider does not know schema {schema_name}")
 
 
@@ -95,7 +107,7 @@ class OpenAIProvider(LlmProvider):
             },
         ]
         response = client.responses.create(
-            model=self.model or os.getenv("OPENAI_MODEL", "gpt-4.1"),
+            model=self.model or os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
             input=[{"role": "user", "content": content}],
         )
         return MarkdownResult(markdown=response.output_text, processor="llm:openai")
@@ -103,7 +115,7 @@ class OpenAIProvider(LlmProvider):
     def generate_structured(self, system_prompt: str, messages: list[dict[str, str]], response_schema: type[T]) -> T:
         client = self._client()
         response = client.responses.parse(
-            model=self.model or os.getenv("OPENAI_MODEL", "gpt-4.1"),
+            model=self.model or os.getenv("OPENAI_MODEL", "gpt-5.4-mini"),
             instructions=system_prompt,
             input=messages,
             text_format=response_schema,
@@ -191,3 +203,10 @@ def _first_heading_or_title(text: str) -> str:
 
 def _truncate(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 3] + "..."
+
+
+def _canonical_seed_title(text: str) -> str:
+    for line in text.splitlines():
+        if line.startswith("Canonical seed title:"):
+            return line.split(":", 1)[1].strip()
+    return ""

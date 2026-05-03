@@ -33,7 +33,8 @@ uv run llm-wiki build --preprocessed preprocessed --vault vault
 2. Put source material under `raw/<level1>/<level2>/<level3>/...`.
 3. Run preprocess. Text and Markdown are read directly by default; provider-supported binary MIME types are sent to the LLM for Markdown extraction; unsupported or failed files fall back to docling.
 4. Run build. The CLI creates level summaries, extracts concept pages, writes Obsidian Markdown, and reports unresolved links.
-5. Inspect `.wiki_build/reports/build_report.json` and `.wiki_build/reports/unresolved_links.md`.
+5. Build automatically runs LLM-based vault refinement to merge duplicate concept pages, rewrite links, and refresh the page index.
+6. Inspect `.wiki_build/reports/build_report.json`, `.wiki_build/reports/refine_report.md`, and `.wiki_build/reports/unresolved_links.md`.
 
 ## Outputs
 
@@ -50,4 +51,4 @@ uv run llm-wiki build --preprocessed preprocessed --vault vault
 - Prefer `--concurrency 1` while debugging provider issues; raise it for production runs.
 - Use `--force` to reprocess unchanged files.
 - Use `--provider mock` only for local debugging when real API calls are not desired.
-
+- Use `uv run llm-wiki refine --vault <vault>` to rerun only the LLM-based vault cleanup step.

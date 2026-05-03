@@ -21,7 +21,8 @@ def resolve_links(vault_root: Path, build_root: Path) -> list[str]:
         title = page["title"]
         for value in [title, *page.get("aliases", [])]:
             canonical[value] = title
-            canonical.setdefault(_singularize(value), title)
+            for variant in _lookup_variants(value):
+                canonical.setdefault(variant, title)
 
     unresolved: set[str] = set()
     for path in vault_root.rglob("*.md"):
@@ -29,7 +30,7 @@ def resolve_links(vault_root: Path, build_root: Path) -> list[str]:
 
         def replace(match: re.Match[str]) -> str:
             target = match.group(1).strip()
-            canonical_target = canonical.get(target) or canonical.get(_singularize(target))
+            canonical_target = _lookup(canonical, target)
             if not canonical_target:
                 unresolved.add(target)
                 return match.group(0)
@@ -69,3 +70,34 @@ def _singularize(value: str) -> str:
     if value.endswith("businesses"):
         return value[: -len("businesses")] + "business"
     return value
+
+
+def _lookup(canonical: dict[str, str], target: str) -> str | None:
+    for variant in _lookup_variants(target):
+        if variant in canonical:
+            return canonical[variant]
+    return None
+
+
+def _lookup_variants(value: str) -> list[str]:
+    variants = [value, _singularize(value)]
+    without_parens = re.sub(r"\s*\([^)]*\)", "", value).strip()
+    if without_parens and without_parens != value:
+        variants.append(without_parens)
+    for suffix in (" Business", " Division"):
+        if value.endswith(suffix):
+            variants.append(value[: -len(suffix)].strip())
+        else:
+            variants.append(f"{value}{suffix}")
+    normalized = []
+    for variant in variants:
+        normalized.append(variant)
+        normalized.append(_normalized_key(variant))
+    return list(dict.fromkeys(normalized))
+
+
+def _normalized_key(value: str) -> str:
+    folded = re.sub(r"\s*\([^)]*\)", "", value).strip().lower()
+    folded = re.sub(r"[\s_/-]+", "-", folded)
+    folded = re.sub(r"[^0-9a-z가-힣-]+", "", folded)
+    return folded.strip("-")
