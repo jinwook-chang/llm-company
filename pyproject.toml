@@ -26,5 +26,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/llm_wiki"]
 
+[tool.uv]
+managed = true
+workspace = { members = ["rag_vault"] }
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
